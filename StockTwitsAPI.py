@@ -1,9 +1,17 @@
 import requests
+import pandas as pd
+import numpy as np
+import time
+import sys
+import matplotlib.pyplot as plt
+from matplotlib.ticker import ScalarFormatter
+from datetime import datetime, timedelta
+
 
 class Twits():
 
     def __init__(self):
-        self.token = "fda2d6a42e36b9337c7bfc0d5263a05ca04040f2"
+        #self.token = #YOUR TOKEN GOES HERE
         self.url = "https://api.stocktwits.com/api/2/"
         self.headers = {'Content-Type': 'application/json'}
 
@@ -38,7 +46,7 @@ class Twits():
             'limit': '{}'.format(limit),
             # Fix when you figure out what this is
             # 'callback' : '{}'.format(None),
-            'filter': '{}'.format(filter)
+            #'filter': '{}'.format(filter)
         }
 
         r = requests.get(url, headers=self.headers, params=data)
@@ -77,7 +85,7 @@ class Twits():
             'limit': '{}'.format(limit),
             # Fix when you figure out what this is
             # 'callback' : '{}'.format(None),
-            'filter': '{}'.format(filter)
+            #'filter': '{}'.format(filter)
         }
 
         r = requests.get(url, headers=self.headers, params=data)
@@ -229,7 +237,7 @@ class Twits():
             'limit': '{}'.format(limit),
             # Fix when you figure out what this is
             # 'callback' : '{}'.format(None),
-            'filter': '{}'.format(filter)
+            #'filter': '{}'.format(filter)
         }
 
         r = requests.get(url, headers={'x-ratelimit-limit': 'True'}, params=data)
@@ -245,13 +253,14 @@ class Twits():
 
         return raw_json['symbol'], r.headers
 
-    def scrape_ticker(self, symbol_id, lookback_volume):
+    def scrape_ticker(self, symbol_id, lookback_volume, min_date=None):
 
         '''Returns a list of historical messages for the symbol, including msg text, user and symbol info.
         Args:
             ticker:	Ticker symbol, Stock ID, or
                         RIC code of the symbol (Required)
             lookback_volume: The amount of messages to retrieve
+            min_date: The oldest date to query tweets
 
         Return:
             list of messages, user and symbol data
@@ -276,22 +285,27 @@ class Twits():
             print('Querying Initialized')
         except Exception:
             print('Error:\tAPI Query Failed to Yield Messages on Initial Query\t', Exception)
-            return -1
+            return master_contents
 
         for _ in range(int(msg_limit * lookback_volume / msg_limit)):
 
             try:
-                time.sleep(1)
+                time.sleep(1/10)
                 msgs = self.get_symbol_msgs(symbol_id=symbol_id, max=int(first_id), limit=msg_limit)
                 first_id = msgs[0]['messages'][-1]['id'] - 1
             except Exception:
                 print('Error:\tAPI Query Failed to Yield Messages on Secondary Query\t', Exception)
                 print('Sleeping 30 sec')
-                time.sleep(30)
+                time.sleep(30/10)
                 print('Retrying')
-                msgs = self.get_symbol_msgs(symbol_id=symbol_id, max=int(first_id), limit=msg_limit)
-                first_id = msgs[0]['messages'][-1]['id'] - 1
-                failures += 1
+
+                try:
+                    msgs = self.get_symbol_msgs(symbol_id=symbol_id, max=int(first_id), limit=msg_limit)
+                    first_id = msgs[0]['messages'][-1]['id'] - 1
+                    failures += 1
+                except:
+                    print("Couldn't fetch:\t",symbol_id)
+                    return master_contents
 
             for item in msgs[0]['messages']:
                 ticker_dict = {}
@@ -318,14 +332,15 @@ class Twits():
                 print('Fetched:\t', counter, '\tFailures:\t', failures)
 
             if counter >= lookback_volume:
+                print("Reached volume limit")
                 break
+            elif min_date is not None:
+                if pd.to_datetime(min_date) >= pd.to_datetime(ticker_dict['created_date']):
+                    print("Reached lookback date limit")
+                    break
 
         return master_contents
 
-# improving the scraper function
-# 1. remove the len(master contents) replace with an incrementer -- done
-# 2. insert a start date limiter
-# 3. insert a max id limiter, both can be none
-# 4. insert a timer feature with T/F
-# 5. figure out why the counter doesn't work past 10k
-# 6. really need a better logging system / progress tracking
+# imporving the scraper function
+# 1. insert a max id limiter, both can be none
+# 2. insert a timer feature with T/F
